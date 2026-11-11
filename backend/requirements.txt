@@ -1,0 +1,8 @@
+chatterbox-tts==0.1.7
+omnivoice==0.2.1
+fastapi
+uvicorn[standard]
+python-multipart
+lameenc
+truststore
+huggingface_hub

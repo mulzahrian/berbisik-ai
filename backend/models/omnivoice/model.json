@@ -1,0 +1,12 @@
+{
+  "type": "omnivoice",
+  "label": "OmniVoice (Indonesia native, paling mirip) - non-komersial",
+  "languages": {
+    "id": "Bahasa Indonesia",
+    "en": "English"
+  },
+  "license": "CC-BY-NC 4.0 (non-commercial)",
+  "num_step": 32,
+  "chunk_chars": 500,
+  "ref_seconds": 16
+}
