@@ -10,7 +10,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from . import tags
-from .engine import MODELS_DIR, default_model, engine, finalize, list_models, list_voices, to_mp3_bytes, to_wav_bytes
+from .engine import MODELS_DIR, _voice_file, default_model, engine, finalize, list_models, list_voices, to_mp3_bytes, to_wav_bytes
 
 MAX_CHARS = 4000
 MAX_FINISHED_JOBS = 20
@@ -172,6 +172,17 @@ def status():
         "inline_tags": sorted(adapter.inline_tags) if adapter else [],
         "max_chars": MAX_CHARS,
     }
+
+
+@app.get("/api/voices/{voice}/audio")
+def get_voice_audio(voice: str):
+    """Serve a reference recording for the local voice library preview."""
+    try:
+        path = _voice_file(voice)
+    except ValueError as e:
+        raise HTTPException(404, str(e)) from e
+    media_types = {".mp3": "audio/mpeg", ".wav": "audio/wav", ".flac": "audio/flac", ".ogg": "audio/ogg", ".m4a": "audio/mp4"}
+    return Response(path.read_bytes(), media_type=media_types.get(path.suffix.lower(), "application/octet-stream"))
 
 
 @app.post("/api/model")
