@@ -21,7 +21,7 @@ const ICONS = {
   settings: 'M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Zm7.3-3.2a7.5 7.5 0 0 0-.1-1.2l1.8-1.4-1.8-3.1-2.2.9a8 8 0 0 0-2-1.2L14.7 3h-3.5l-.3 2.3a8 8 0 0 0-2 1.2l-2.2-.9-1.8 3.1 1.8 1.4a7.5 7.5 0 0 0 0 2.4l-1.8 1.4 1.8 3.1 2.2-.9a8 8 0 0 0 2 1.2l.3 2.3h3.5l.3-2.3a8 8 0 0 0 2-1.2l2.2.9 1.8-3.1-1.8-1.4c.1-.4.1-.8.1-1.2Z',
   help: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm-2.2-10.2a2.3 2.3 0 1 1 4.1 1.4c-.8.9-1.9 1.2-1.9 2.6M12 17.8v.1',
   chevron: 'm7 9 5 5 5-5', download: 'M12 3v11m0 0 4-4m-4 4-4-4M4 17v1.5A2.5 2.5 0 0 0 6.5 21h11a2.5 2.5 0 0 0 2.5-2.5V17',
-  play: 'm9 6 9 6-9 6V6Z', pause: 'M8 6v12M16 6v12', stop: 'M6 6h12v12H6z', volume: 'M4 10v4h3l4 3V7l-4 3H4Zm11.5-2a5 5 0 0 1 0 8M18 5a9 9 0 0 1 0 14', plus: 'M12 5v14M5 12h14',
+  play: 'm9 6 9 6-9 6V6Z', pause: 'M8 6v12M16 6v12', stop: 'M6 6h12v12H6z', volume: 'M4 10v4h3l4 3V7l-4 3H4Zm11.5-2a5 5 0 0 1 0 8M18 5a9 9 0 0 1 0 14', check: 'm5 12 4 4L19 6', plus: 'M12 5v14M5 12h14',
 }
 
 function Icon({ name, size = 18, strokeWidth = 1.8 }) {
@@ -90,6 +90,17 @@ function AudioPlayer({ src, autoPlay = false, compact = false }) {
   )
 }
 
+function VoiceLibrary({ voices, voiceInfo, selectedVoice, onUseVoice, ready, serverDown }) {
+  return (
+    <div className="library-view">
+      <div className="page-heading library-heading"><div><p className="eyebrow">VOICE LIBRARY</p><h1>Your voices</h1><p className="page-subtitle">Preview and manage the voices available in your <code>ref/</code> folder.</p></div><div className="library-stats"><div><strong>{voices.length}</strong><span>voices</span></div><div><strong>Local</strong><span>private</span></div></div></div>
+      <div className="library-banner"><div className="banner-icon"><Icon name="library" size={19} /></div><div><strong>Reference voices, ready to use</strong><p>These recordings stay on your machine. Choose a voice to preview its reference audio, then use it in Text to Speech.</p></div><span className={`library-status ${serverDown ? 'offline' : ready ? 'ready' : ''}`}><span className="status-dot" />{serverDown ? 'Backend offline' : ready ? 'Engine ready' : 'Loading engine'}</span></div>
+      {voices.length === 0 ? <div className="empty-library panel"><div className="empty-icon"><Icon name="waveform" size={25} /></div><h2>No voices found</h2><p>Add an audio file such as <code>ref/narrator.wav</code> and refresh the page.</p></div> : <div className="voice-grid">{voices.map((name) => { const info = voiceInfo?.[name]; const isSelected = selectedVoice === name; return <article className={`voice-card panel ${isSelected ? 'selected' : ''}`} key={name}><div className="voice-card-header"><div className="voice-card-avatar"><Icon name="waveform" size={19} /></div><div className="voice-card-title"><h2>{name}</h2><p>Reference voice · <code>ref/{name}</code></p></div>{isSelected && <span className="selected-badge">In use</span>}</div><AudioPlayer key={name} compact src={`/api/voices/${encodeURIComponent(name)}/audio`} /><div className="voice-details"><div className="detail-line"><span>Voice type</span><strong>Cloned reference</strong></div><div className="detail-line"><span>Transcript</span><strong>{info?.ref_text ? 'Available' : 'Generated on load'}</strong></div></div>{info?.ref_text ? <div className="voice-transcript"><span>Reference transcript</span><p>“{info.ref_text}”</p></div> : <div className="voice-transcript muted"><span>About this voice</span><p>Transcript metadata will appear when the local model finishes loading.</p></div>}<button className={`use-voice-button ${isSelected ? 'active' : ''}`} type="button" onClick={() => onUseVoice(name)}><Icon name={isSelected ? 'check' : 'play'} size={15} />{isSelected ? 'Currently selected' : 'Use this voice'}</button></article> })}</div>}
+      <section className="library-help panel"><div className="tips-icon"><Icon name="help" size={16} /></div><div><strong>How voice cloning works</strong><p>Berbisik uses each file in <code>ref/</code> as a private voice reference. For best results, use a clear recording with one speaker and minimal background noise.</p></div></section>
+    </div>
+  )
+}
+
 async function api(path, options) {
   const res = await fetch(path, options)
   if (!res.ok) {
@@ -113,6 +124,7 @@ export default function App() {
   const [error, setError] = useState('')
   const [history, setHistory] = useState([])
   const [pollKey, setPollKey] = useState(0)
+  const [activeView, setActiveView] = useState('create')
   const textRef = useRef(null)
 
   useEffect(() => localStorage.setItem('tts-text', text), [text])
@@ -185,15 +197,16 @@ export default function App() {
       <aside className="sidebar">
         <div className="brand"><div className="brand-mark"><Icon name="waveform" size={22} /></div><span>berbisik<span className="brand-dot">.</span></span></div>
         <div className="sidebar-label">Workspace</div>
-        <nav className="nav-list" aria-label="Navigasi utama"><button className="nav-item active"><Icon name="spark" /><span>Create</span></button><button className="nav-item"><Icon name="library" /><span>Voice library</span></button><button className="nav-item"><Icon name="folder" /><span>Projects</span><span className="nav-count">0</span></button><button className="nav-item"><Icon name="history" /><span>History</span></button></nav>
+        <nav className="nav-list" aria-label="Navigasi utama"><button type="button" className={`nav-item ${activeView === 'create' ? 'active' : ''}`} onClick={() => setActiveView('create')}><Icon name="spark" /><span>Create</span></button><button type="button" className={`nav-item ${activeView === 'library' ? 'active' : ''}`} onClick={() => setActiveView('library')}><Icon name="library" /><span>Voice library</span></button><button type="button" className="nav-item"><Icon name="folder" /><span>Projects</span><span className="nav-count">0</span></button><button type="button" className="nav-item"><Icon name="history" /><span>History</span></button></nav>
         <div className="sidebar-spacer" />
         <div className={`backend-card ${serverDown ? 'offline' : ready ? 'online' : ''}`}><span className="live-dot" /><div><strong>{ready ? 'Local engine ready' : serverDown ? 'Engine offline' : 'Connecting...'}</strong><small>{ready ? `${server.device?.toUpperCase() ?? 'CPU'} · private` : 'Check your backend'}</small></div></div>
         <button className="nav-item muted"><Icon name="settings" /><span>Settings</span></button><div className="profile-row"><div className="avatar">B</div><div><strong>Berbisik workspace</strong><small>Local account</small></div><span className="more">•••</span></div>
       </aside>
 
       <div className="main-shell">
-        <header className="topbar"><div className="breadcrumbs"><span>Workspace</span><span>/</span><strong>Text to Speech</strong></div><div className="topbar-actions"><span className={`status-pill ${serverDown ? 'down' : ready ? 'ready' : 'loading'}`}><span className="status-dot" />{statusText}</span><button className="icon-button" aria-label="Help"><Icon name="help" size={19} /></button></div></header>
+        <header className="topbar"><div className="breadcrumbs"><span>Workspace</span><span>/</span><strong>{activeView === 'library' ? 'Voice library' : 'Text to Speech'}</strong></div><div className="topbar-actions"><span className={`status-pill ${serverDown ? 'down' : ready ? 'ready' : 'loading'}`}><span className="status-dot" />{statusText}</span><button className="icon-button" aria-label="Help"><Icon name="help" size={19} /></button></div></header>
         <main className="workspace">
+          {activeView === 'library' ? <VoiceLibrary voices={server?.voices ?? []} voiceInfo={server?.voice_info ?? {}} selectedVoice={voice} onUseVoice={(name) => { setVoice(name); setActiveView('create') }} ready={ready} serverDown={serverDown} /> : <div className="workspace-content">
           <div className="page-heading"><div><p className="eyebrow">CREATE</p><h1>Text to Speech</h1><p className="page-subtitle">Turn your words into natural, expressive speech.</p></div><button className="new-project"><Icon name="plus" size={17} /> New project</button></div>
           <div className="studio-grid">
             <section className="editor-panel panel">
@@ -211,6 +224,7 @@ export default function App() {
           </div>
           {history.length > 1 && <section className="history-section panel"><div className="section-heading"><div><p className="eyebrow">RECENT</p><h2>Session history</h2></div><span>{history.length - 1} generations</span></div>{history.slice(1).map((h) => <div key={h.id} className="history-item"><div className="history-file"><div className="file-icon"><Icon name="waveform" size={17} /></div><div className="history-text"><strong>{h.text}…</strong><span>{h.at?.toLocaleTimeString?.([], { hour: '2-digit', minute: '2-digit' }) ?? 'Just now'}</span></div></div><AudioPlayer key={h.id} compact src={`/api/jobs/${h.id}/audio?format=wav`} /><a className="history-download" href={`/api/jobs/${h.id}/audio?format=mp3&download=true`}><Icon name="download" size={15} /> MP3</a></div>)}</section>}
           <section className="help-section panel"><div className="section-heading"><div><p className="eyebrow">QUICK GUIDE</p><h2>Expressive tags</h2></div><Icon name="help" size={18} /></div><div className="help-content"><p>Tags apply to the text that follows until another tag is used.</p><pre>[serious] Dinding itu berdiri seratus tahun. [intense] Lalu tanah mulai bergetar! [pause] [powerful] Dan manusia kembali mengenal rasa takut.</pre></div></section>
+          </div>}
         </main>
       </div>
     </div>
