@@ -21,7 +21,7 @@ const ICONS = {
   settings: 'M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Zm7.3-3.2a7.5 7.5 0 0 0-.1-1.2l1.8-1.4-1.8-3.1-2.2.9a8 8 0 0 0-2-1.2L14.7 3h-3.5l-.3 2.3a8 8 0 0 0-2 1.2l-2.2-.9-1.8 3.1 1.8 1.4a7.5 7.5 0 0 0 0 2.4l-1.8 1.4 1.8 3.1 2.2-.9a8 8 0 0 0 2 1.2l.3 2.3h3.5l.3-2.3a8 8 0 0 0 2-1.2l2.2.9 1.8-3.1-1.8-1.4c.1-.4.1-.8.1-1.2Z',
   help: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm-2.2-10.2a2.3 2.3 0 1 1 4.1 1.4c-.8.9-1.9 1.2-1.9 2.6M12 17.8v.1',
   chevron: 'm7 9 5 5 5-5', download: 'M12 3v11m0 0 4-4m-4 4-4-4M4 17v1.5A2.5 2.5 0 0 0 6.5 21h11a2.5 2.5 0 0 0 2.5-2.5V17',
-  play: 'm9 6 9 6-9 6V6Z', stop: 'M6 6h12v12H6z', plus: 'M12 5v14M5 12h14',
+  play: 'm9 6 9 6-9 6V6Z', pause: 'M8 6v12M16 6v12', stop: 'M6 6h12v12H6z', volume: 'M4 10v4h3l4 3V7l-4 3H4Zm11.5-2a5 5 0 0 1 0 8M18 5a9 9 0 0 1 0 14', plus: 'M12 5v14M5 12h14',
 }
 
 function Icon({ name, size = 18, strokeWidth = 1.8 }) {
@@ -33,6 +33,61 @@ function fmtTime(sec) {
   const s = Math.round(sec)
   const m = Math.floor(s / 60)
   return m ? `${m}m ${s % 60}d` : `${s}d`
+}
+
+function formatClock(sec) {
+  if (!Number.isFinite(sec)) return '00:00'
+  const total = Math.max(0, Math.floor(sec))
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+}
+
+function AudioPlayer({ src, autoPlay = false, compact = false }) {
+  const audioRef = useRef(null)
+  const [playing, setPlaying] = useState(false)
+  const [current, setCurrent] = useState(0)
+  const [duration, setDuration] = useState(0)
+  const [volume, setVolume] = useState(0.85)
+  const bars = [35, 58, 44, 78, 52, 91, 68, 43, 74, 55, 86, 42, 63, 77, 48, 69, 92, 53, 38, 70, 47, 82, 61, 45, 74, 56, 87, 40]
+
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio || !autoPlay) return undefined
+    const promise = audio.play()
+    promise?.catch(() => setPlaying(false))
+    return undefined
+  }, [autoPlay, src])
+
+  const togglePlay = () => {
+    const audio = audioRef.current
+    if (!audio) return
+    if (audio.paused) audio.play().catch(() => {})
+    else audio.pause()
+  }
+
+  const seek = (event) => {
+    const next = Number(event.target.value)
+    if (audioRef.current) audioRef.current.currentTime = next
+    setCurrent(next)
+  }
+
+  const changeVolume = (event) => {
+    const next = Number(event.target.value)
+    setVolume(next)
+    if (audioRef.current) audioRef.current.volume = next
+  }
+
+  const progress = duration ? (current / duration) * 100 : 0
+  return (
+    <div className={`audio-player ${compact ? 'compact' : ''}`}>
+      <audio ref={audioRef} className="audio-native" src={src} preload="metadata" autoPlay={autoPlay} onLoadedMetadata={(event) => setDuration(event.currentTarget.duration)} onTimeUpdate={(event) => setCurrent(event.currentTarget.currentTime)} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} />
+      <div className="audio-main">
+        <button className="audio-play" type="button" onClick={togglePlay} aria-label={playing ? 'Pause audio' : 'Play audio'}><Icon name={playing ? 'pause' : 'play'} size={compact ? 14 : 18} /></button>
+        <div className="audio-visualizer" aria-hidden="true">{bars.map((height, index) => <span key={index} className={index / bars.length * 100 <= progress ? 'played' : ''} style={{ height: `${height}%` }} />)}</div>
+        <div className="audio-time"><span>{formatClock(current)}</span><span>{formatClock(duration)}</span></div>
+      </div>
+      {!compact && <div className="audio-controls"><div className="audio-seek"><input type="range" min="0" max={duration || 0.01} step="0.01" value={Math.min(current, duration || 0.01)} onChange={seek} aria-label="Seek audio" style={{ '--audio-progress': `${progress}%` }} /></div><div className="audio-volume"><Icon name="volume" size={14} /><input type="range" min="0" max="1" step="0.01" value={volume} onChange={changeVolume} aria-label="Volume" /></div></div>}
+    </div>
+  )
 }
 
 async function api(path, options) {
@@ -150,11 +205,11 @@ export default function App() {
               {server?.model === 'ready' && !server.supports_emotion && <div className="hint">Tag emosi mengatur tempo dan jeda. Pilih model Chatterbox untuk kontrol intensitas emosi penuh.</div>}
               <div className="generate-row"><div className="generate-info"><span className="keyboard-key">⌘</span><span>Enter to generate</span></div><div className="actions"><button className="primary" disabled={!ready || running || !text.trim()} onClick={generate}><Icon name={running ? 'stop' : 'play'} size={16} />{running ? 'Generating...' : 'Generate speech'}</button>{running && <button className="secondary" onClick={cancel}>Cancel</button>}</div></div>
               {error && <div className="error">⚠ {error}</div>}
-              {job && <div className="job-output">{running && <><div className="progress-label"><span>{job.status === 'queued' ? `Waiting in queue (#${job.queue_position})` : `Generating audio · ${progress}%`}</span><span>{fmtTime(job.eta_sec)} remaining</span></div><div className="bar"><div style={{ width: `${progress}%` }} /></div>{job.current_text && <div className="current">🔊 {job.current_text}</div>}</>}{job.status === 'cancelled' && <div className="job-meta">Generation cancelled.</div>}{job.status === 'done' && <div className="result"><audio controls autoPlay src={`/api/jobs/${job.id}/audio?format=wav`} /><div className="job-meta">Duration {fmtTime(job.duration_sec)} · generated in {fmtTime(job.elapsed_sec)}</div><div className="downloads"><a className="btn" href={`/api/jobs/${job.id}/audio?format=mp3&download=true`}><Icon name="download" size={15} /> MP3</a><a className="btn ghost" href={`/api/jobs/${job.id}/audio?format=wav&download=true`}><Icon name="download" size={15} /> WAV</a></div></div>}</div>}
+              {job && <div className="job-output">{running && <><div className="progress-label"><span>{job.status === 'queued' ? `Waiting in queue (#${job.queue_position})` : `Generating audio · ${progress}%`}</span><span>{fmtTime(job.eta_sec)} remaining</span></div><div className="bar"><div style={{ width: `${progress}%` }} /></div>{job.current_text && <div className="current">🔊 {job.current_text}</div>}</>}{job.status === 'cancelled' && <div className="job-meta">Generation cancelled.</div>}{job.status === 'done' && <div className="result"><AudioPlayer key={job.id} src={`/api/jobs/${job.id}/audio?format=wav`} autoPlay /><div className="job-meta">Duration {fmtTime(job.duration_sec)} · generated in {fmtTime(job.elapsed_sec)}</div><div className="downloads"><a className="btn" href={`/api/jobs/${job.id}/audio?format=mp3&download=true`}><Icon name="download" size={15} /> MP3</a><a className="btn ghost" href={`/api/jobs/${job.id}/audio?format=wav&download=true`}><Icon name="download" size={15} /> WAV</a></div></div>}</div>}
             </section>
             <aside className="right-column"><section className="settings-card panel"><div className="panel-header compact"><div><h2>Voice settings</h2><p>Fine-tune your output.</p></div><button className="icon-button subtle" aria-label="Settings"><Icon name="settings" size={17} /></button></div><div className="voice-preview"><div className="voice-avatar"><Icon name="waveform" size={20} /></div><div><strong>{voice || 'No voice selected'}</strong><span>{refText ? 'Custom reference voice' : 'Reference voice'}</span></div><span className="voice-status"><span className="status-dot" />Ready</span></div><div className="setting-row"><span>Voice consistency</span><span className="setting-value">Default</span></div><div className="setting-row"><span>Style</span><span className="setting-value">Expressive</span></div><div className="setting-row"><span>Output format</span><span className="setting-value">WAV · 44.1 kHz</span></div></section><section className="tips-card"><div className="tips-icon"><Icon name="spark" size={16} /></div><div><strong>Make it sound alive</strong><p>Use tags like <code>[curious]</code>, <code>[pause]</code>, or <code>[dramatic]</code> to shape the delivery.</p></div></section><section className="usage-card panel"><div className="usage-top"><div><p className="eyebrow">SESSION</p><h3>Local & private</h3></div><Icon name="settings" size={18} /></div><div className="usage-line"><span>Voice reference</span><strong>{voice || 'Not selected'}</strong></div><div className="usage-line"><span>Characters used</span><strong>{text.length.toLocaleString('id-ID')}</strong></div></section></aside>
           </div>
-          {history.length > 1 && <section className="history-section panel"><div className="section-heading"><div><p className="eyebrow">RECENT</p><h2>Session history</h2></div><span>{history.length - 1} generations</span></div>{history.slice(1).map((h) => <div key={h.id} className="history-item"><div className="history-file"><div className="file-icon"><Icon name="waveform" size={17} /></div><div className="history-text"><strong>{h.text}…</strong><span>{h.at?.toLocaleTimeString?.([], { hour: '2-digit', minute: '2-digit' }) ?? 'Just now'}</span></div></div><audio controls src={`/api/jobs/${h.id}/audio?format=wav`} /><a className="history-download" href={`/api/jobs/${h.id}/audio?format=mp3&download=true`}><Icon name="download" size={15} /> MP3</a></div>)}</section>}
+          {history.length > 1 && <section className="history-section panel"><div className="section-heading"><div><p className="eyebrow">RECENT</p><h2>Session history</h2></div><span>{history.length - 1} generations</span></div>{history.slice(1).map((h) => <div key={h.id} className="history-item"><div className="history-file"><div className="file-icon"><Icon name="waveform" size={17} /></div><div className="history-text"><strong>{h.text}…</strong><span>{h.at?.toLocaleTimeString?.([], { hour: '2-digit', minute: '2-digit' }) ?? 'Just now'}</span></div></div><AudioPlayer key={h.id} compact src={`/api/jobs/${h.id}/audio?format=wav`} /><a className="history-download" href={`/api/jobs/${h.id}/audio?format=mp3&download=true`}><Icon name="download" size={15} /> MP3</a></div>)}</section>}
           <section className="help-section panel"><div className="section-heading"><div><p className="eyebrow">QUICK GUIDE</p><h2>Expressive tags</h2></div><Icon name="help" size={18} /></div><div className="help-content"><p>Tags apply to the text that follows until another tag is used.</p><pre>[serious] Dinding itu berdiri seratus tahun. [intense] Lalu tanah mulai bergetar! [pause] [powerful] Dan manusia kembali mengenal rasa takut.</pre></div></section>
         </main>
       </div>
