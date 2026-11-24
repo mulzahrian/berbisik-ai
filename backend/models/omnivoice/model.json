@@ -6,7 +6,18 @@
     "en": "English"
   },
   "license": "CC-BY-NC 4.0 (non-commercial)",
-  "num_step": 32,
-  "chunk_chars": 500,
+  "num_step": 48,
+  "guidance_scale": 1.8,
+  "t_shift": 0.1,
+  "denoise": true,
+  "postprocess_output": true,
+  "position_temperature": 5.0,
+  "class_temperature": 0.0,
+  "audio_chunk_duration": 20.0,
+  "audio_chunk_threshold": 28.0,
+  "pad_duration": 0.08,
+  "fade_duration": 0.08,
+  "normalize_text": true,
+  "chunk_chars": 900,
   "ref_seconds": 16
 }

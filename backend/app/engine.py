@@ -146,7 +146,13 @@ class Engine:
         with self.lock:
             self._ensure_voice(voice)
             torch.manual_seed(seed)
-            audio = self.adapter.synthesize(chunk.text, chunk.style, language, voice)
+            audio = self.adapter.synthesize(
+                chunk.text,
+                chunk.style,
+                language,
+                voice,
+                style_name=chunk.style_name,
+            )
         audio, _ = librosa.effects.trim(audio, top_db=45)
         fade = min(len(audio) // 2, int(self.sr * 0.01))
         if fade:

@@ -57,7 +57,14 @@ class BaseAdapter:
         return dict(inline_tags=self.inline_tags, max_chars=self.max_chars, merge_chars=self.merge_chars,
                     split_on_style=self.split_on_style)
 
-    def synthesize(self, text: str, style: Style, language: str, voice: str) -> np.ndarray:
+    def synthesize(
+        self,
+        text: str,
+        style: Style,
+        language: str,
+        voice: str,
+        style_name: str = "neutral",
+    ) -> np.ndarray:
         raise NotImplementedError
 
 
@@ -91,7 +98,7 @@ class ChatterboxAdapter(BaseAdapter):
         self.model.conds = self._conds[voice]
         return {}
 
-    def synthesize(self, text, style, language, voice):
+    def synthesize(self, text, style, language, voice, style_name="neutral"):
         kwargs = dict(exaggeration=style.exaggeration, cfg_weight=style.cfg_weight, temperature=style.temperature)
         if self.multilingual:
             kwargs["language_id"] = {"id": "ms"}.get(language, language)
@@ -114,8 +121,30 @@ class OmniVoiceAdapter(BaseAdapter):
         "dissatisfaction-hnn",
     })
 
+    # OmniVoice does not expose the same emotion controls as Chatterbox. These
+    # small speed changes make the existing style tags useful without forcing
+    # unnatural pitch or loudness changes onto a cloned voice.
+    STYLE_SPEEDS = {
+        "calm": 0.96,
+        "soft": 0.97,
+        "whisper": 0.93,
+        "sad": 0.96,
+        "serious": 0.98,
+        "mysterious": 0.97,
+        "curious": 1.01,
+        "happy": 1.02,
+        "excited": 1.04,
+        "energetic": 1.03,
+        "intense": 1.02,
+        "angry": 1.02,
+        "dramatic": 0.98,
+        "powerful": 1.0,
+        "epic": 0.99,
+    }
+
     def load(self):
         from omnivoice import OmniVoice
+        from omnivoice import OmniVoiceGenerationConfig
 
         asr = self.dir / "asr"
         self.model = OmniVoice.from_pretrained(
@@ -126,9 +155,24 @@ class OmniVoiceAdapter(BaseAdapter):
             asr_device=self.device,
         )
         self.sr = self.model.sampling_rate
-        self.num_step = int(self.config.get("num_step", 32))
+        # More denoising steps and slightly softer CFG reduce the overly
+        # uniform, synthetic delivery that is noticeable with short prompts.
+        self.generation_config = OmniVoiceGenerationConfig(
+            num_step=int(self.config.get("num_step", 48)),
+            guidance_scale=float(self.config.get("guidance_scale", 1.8)),
+            t_shift=float(self.config.get("t_shift", 0.1)),
+            denoise=bool(self.config.get("denoise", True)),
+            postprocess_output=bool(self.config.get("postprocess_output", True)),
+            audio_chunk_duration=float(self.config.get("audio_chunk_duration", 20.0)),
+            audio_chunk_threshold=float(self.config.get("audio_chunk_threshold", 28.0)),
+            position_temperature=float(self.config.get("position_temperature", 5.0)),
+            class_temperature=float(self.config.get("class_temperature", 0.0)),
+            pad_duration=float(self.config.get("pad_duration", 0.08)),
+            fade_duration=float(self.config.get("fade_duration", 0.08)),
+        )
+        self.normalize_text = bool(self.config.get("normalize_text", True))
         self.ref_target_s = float(self.config.get("ref_seconds", 16))
-        self.max_chars = self.merge_chars = int(self.config.get("chunk_chars", 500))
+        self.max_chars = self.merge_chars = int(self.config.get("chunk_chars", 900))
         self._prompts, self._info = {}, {}
 
     def _sentence_segments(self, y16: np.ndarray) -> list[dict]:
@@ -203,12 +247,19 @@ class OmniVoiceAdapter(BaseAdapter):
         opts["sentence_pause_ms"] = self._info.get(voice, {}).get("pause_ms", 350)
         return opts
 
-    def synthesize(self, text, style, language, voice):
+    def synthesize(self, text, style, language, voice, style_name="neutral"):
+        speed = self.STYLE_SPEEDS.get(style_name, 1.0)
+        # "whisper" is the only delivery-style instruction supported by the
+        # OmniVoice checkpoint. Other tags still affect pacing above.
+        instruct = "whisper" if style_name == "whisper" else None
         audio = self.model.generate(
             text=text,
             language=language,
             voice_clone_prompt=self._prompts[voice],
-            num_step=self.num_step,
+            speed=speed,
+            instruct=instruct,
+            normalize_text=self.normalize_text,
+            generation_config=self.generation_config,
         )
         return np.asarray(audio[0], dtype=np.float32).reshape(-1)
 

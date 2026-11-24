@@ -341,7 +341,7 @@ Tag yang tersedia:
 Perilaku tag bergantung pada adapter:
 
 - **Chatterbox** memakai parameter style seperti exaggeration, cfg weight, temperature, dan pause.
-- **OmniVoice** terutama mengikuti prosodi reference audio. Jeda tetap diproses, sedangkan tag emosi tidak otomatis menjadi kontrol emosi yang kuat pada adapter saat ini.
+- **OmniVoice** mengikuti prosodi reference audio, memakai decoding 48 langkah dengan CFG yang lebih lembut, normalisasi angka, dan chunking internal agar aliran kalimat tidak sering reset. Tag gaya diterjemahkan menjadi perubahan tempo halus; `[whisper]` juga memakai kontrol whisper native OmniVoice. Untuk perubahan emosi yang kuat, Chatterbox masih lebih cocok.
 - Tag yang tidak dikenal akan dilewati dan ditampilkan sebagai peringatan di UI.
 
 ## 10. Menggunakan model lain
@@ -466,8 +466,10 @@ Jika `False`, kemungkinan wheel CPU masih terpasang, driver belum benar, atau ve
 - Gunakan reference audio yang bersih dan memiliki gaya bicara yang ingin ditiru.
 - Pastikan bahasa reference dan target sama jika ingin pengucapan lebih stabil.
 - Tambahkan tanda baca dan pecah kalimat panjang.
+- OmniVoice sekarang memakai decoding berkualitas lebih tinggi, normalisasi teks, dan konteks lebih panjang. Konsekuensinya, proses generate sedikit lebih lambat.
+- Gunakan tag gaya seperlunya: pada OmniVoice tag terutama mengubah tempo, sedangkan tanda baca dan reference audio menentukan intonasi utama.
 - Gunakan Chatterbox jika prioritasnya kontrol emosi melalui tag.
-- Untuk OmniVoice, ingat bahwa reference audio sangat memengaruhi ritme dan intonasi.
+- Untuk OmniVoice, reference audio 10–20 detik yang bersih, satu pembicara, dan memiliki intonasi yang ingin ditiru tetap memberi pengaruh terbesar.
 
 ### Reference voice tidak berubah setelah mengganti file
 
